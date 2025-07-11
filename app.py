@@ -7,7 +7,6 @@ DB_PATH = './gsod_ph.db'
 
 st.set_page_config(page_title="GSOD PH Dashboard", layout="wide")
 
-# Cache connection so it's reused across reruns
 @st.cache_resource
 def get_connection():
     return duckdb.connect(DB_PATH)
@@ -15,12 +14,14 @@ def get_connection():
 con = get_connection()
 
 st.title("GSOD Philippines Dashboard")
+st.markdown("""Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial to metric.
 
-# Load station list with caching
+**Disclaimer:** This dashboard is for educational and research purposes only. For official data, please consult [PAGASA](https://www.pagasa.dost.gov.ph/climate/climate-data).""")
+
 @st.cache_data
 def load_stations():
     stations_df = con.execute("""
-        SELECT DISTINCT station_id, station_name
+        SELECT DISTINCT station_id, station_name, lat, lon
         FROM gsod_daily
         ORDER BY station_name
     """).df()
@@ -29,7 +30,13 @@ def load_stations():
 
 stations_df = load_stations()
 
-# Sidebar controls
+variable_options = {
+    'TEMP_C': 'Mean Temperature',
+    'PRCP_mm': 'Precipitation',
+    'MAX_C': 'Maximum Temperature',
+    'MIN_C': 'Minimum Temperature'
+}
+
 with st.sidebar:
     station_selection = st.selectbox(
         "Select Station",
@@ -50,15 +57,17 @@ with st.sidebar:
         key="date_range"
     )
 
-    plot_variable = st.selectbox(
-        "Variable to Plot", ['TEMP_C', 'PRCP_mm'], key="variable_select"
+    plot_variable_label = st.selectbox(
+        "Variable to Plot",
+        list(variable_options.values()),
+        key="variable_select"
     )
+    plot_variable = [k for k, v in variable_options.items() if v == plot_variable_label][0]
 
     agg_level = st.selectbox(
-        "Aggregation Level", ["Daily", "Monthly", "Yearly"], key="aggregation_select"
+        "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean (All Years)", "Rainy Days"], key="aggregation_select"
     )
 
-# Build query dynamically
 if agg_level == "Daily":
     query = f"""
         SELECT date AS period, {plot_variable} AS value
@@ -67,12 +76,35 @@ if agg_level == "Daily":
           AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
         ORDER BY period
     """
-else:
-    trunc_unit = 'month' if agg_level == "Monthly" else 'year'
-    agg_func = 'AVG' if plot_variable == 'TEMP_C' else 'SUM'
-
+elif agg_level == "Monthly":
     query = f"""
-        SELECT DATE_TRUNC('{trunc_unit}', date) AS period, {agg_func}({plot_variable}) AS value
+        SELECT DATE_TRUNC('month', date) AS period, AVG({plot_variable}) AS value
+        FROM gsod_daily
+        WHERE station_id = '{station_selection}'
+          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+        GROUP BY period
+        ORDER BY period
+    """
+elif agg_level == "Yearly":
+    query = f"""
+        SELECT DATE_TRUNC('year', date) AS period, AVG({plot_variable}) AS value
+        FROM gsod_daily
+        WHERE station_id = '{station_selection}'
+          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+        GROUP BY period
+        ORDER BY period
+    """
+elif agg_level == "Monthly Mean (All Years)":
+    query = f"""
+        SELECT EXTRACT(month FROM date) AS period, AVG({plot_variable}) AS value
+        FROM gsod_daily
+        WHERE station_id = '{station_selection}'
+        GROUP BY period
+        ORDER BY period
+    """
+elif agg_level == "Rainy Days":
+    query = f"""
+        SELECT DATE_TRUNC('month', date) AS period, COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS value
         FROM gsod_daily
         WHERE station_id = '{station_selection}'
           AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
@@ -80,31 +112,32 @@ else:
         ORDER BY period
     """
 
-# Query and display
 result_df = con.execute(query).df()
+if 'value' in result_df.columns:
+    result_df['value'] = pd.to_numeric(result_df['value'], errors='coerce').round(2)
 
-st.write(f"### {stations_df.set_index('station_id').loc[station_selection, 'label']}")
-st.write(f"Showing {plot_variable} aggregated {agg_level.lower()} from {date_range[0]} to {date_range[1]}.")
+station_info = stations_df.set_index('station_id').loc[station_selection]
+st.write(f"### {station_info['label']}")
+st.write(f"Location: {round(float(station_info['lat']), 2)}, {round(float(station_info['lon']), 2)}")
+st.write(f"Showing {plot_variable_label} aggregated {agg_level.lower()} from {date_range[0]} to {date_range[1]}.")
 
 if not result_df.empty:
     chart_data = result_df.set_index('period')['value'].reset_index()
     with st.sidebar:
-        if plot_variable == 'TEMP_C':
-            y_min = st.number_input("Y-axis Min (Temperature °C)", value=-5)
-            y_max = st.number_input("Y-axis Max (Temperature °C)", value=40)
-        else:
-            y_min = st.number_input("Y-axis Min (Precipitation mm)", value=0.0)
-            y_max = st.number_input("Y-axis Max (Precipitation mm)", value=float(result_df['value'].max() * 1.1))
-    if plot_variable == 'PRCP_mm':
+        y_min = st.number_input("Y-axis Min", value=float(chart_data['value'].min() - 5))
+        y_max = st.number_input("Y-axis Max", value=float(chart_data['value'].max() + 5))
+
+    if plot_variable == 'PRCP_mm' or agg_level == "Rainy Days":
         chart = alt.Chart(chart_data).mark_bar().encode(
-            x='period:T',
-            y=alt.Y('value:Q', title='Precipitation (mm)', scale=alt.Scale(domain=[y_min, y_max]))
+            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
     else:
         chart = alt.Chart(chart_data).mark_line().encode(
-            x='period:T',
-            y=alt.Y('value:Q', title='Temperature (°C)', scale=alt.Scale(domain=[y_min, y_max]))
+            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
+
     st.altair_chart(chart, use_container_width=True)
     with st.expander("Show Data Table"):
         st.dataframe(result_df)
