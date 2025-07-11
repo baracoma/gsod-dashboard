@@ -164,15 +164,28 @@ if not result_df.empty:
 
     if plot_variable == 'PRCP_mm' or plot_variable == 'RAINY_DAYS':
         bar_size = max(10, int(300 / len(chart_data)))
+        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean (All Years)" else alt.X(
+            'period:O',
+            sort=list(range(1, 13)),
+            title='Month',
+            axis=alt.Axis(labelExpr="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][datum.value - 1]")
+        )
         chart = alt.Chart(chart_data).mark_bar(size=bar_size).encode(
-            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            x=x,
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
     else:
+        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean (All Years)" else alt.X(
+            'period:O',
+            sort=list(range(1, 13)),
+            title='Month',
+            axis=alt.Axis(labelExpr="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][datum.value - 1]")
+        )
         chart = alt.Chart(chart_data).mark_line().encode(
-            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            x=x,
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
+
 
 
     st.altair_chart(chart, use_container_width=True)
