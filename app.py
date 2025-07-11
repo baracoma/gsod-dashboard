@@ -158,10 +158,7 @@ if not result_df.empty:
             x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
-        chart = alt.Chart(chart_data).mark_line().encode(
-            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
-            y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
-        )
+
 
     st.altair_chart(chart, use_container_width=True)
     with st.expander("Show Data Table"):
