@@ -88,15 +88,22 @@ st.write(f"Showing {plot_variable} aggregated {agg_level.lower()} from {date_ran
 
 if not result_df.empty:
     chart_data = result_df.set_index('period')['value'].reset_index()
+    with st.sidebar:
+        if plot_variable == 'TEMP_C':
+            y_min = st.number_input("Y-axis Min (Temperature °C)", value=-5)
+            y_max = st.number_input("Y-axis Max (Temperature °C)", value=40)
+        else:
+            y_min = st.number_input("Y-axis Min (Precipitation mm)", value=0.0)
+            y_max = st.number_input("Y-axis Max (Precipitation mm)", value=float(result_df['value'].max() * 1.1))
     if plot_variable == 'PRCP_mm':
         chart = alt.Chart(chart_data).mark_bar().encode(
             x='period:T',
-            y=alt.Y('value:Q', title='Precipitation (mm)')
+            y=alt.Y('value:Q', title='Precipitation (mm)', scale=alt.Scale(domain=[y_min, y_max]))
         )
     else:
         chart = alt.Chart(chart_data).mark_line().encode(
             x='period:T',
-            y=alt.Y('value:Q', title='Temperature (°C)', scale=alt.Scale(domain=[-5, 40]))
+            y=alt.Y('value:Q', title='Temperature (°C)', scale=alt.Scale(domain=[y_min, y_max]))
         )
     st.altair_chart(chart, use_container_width=True)
     with st.expander("Show Data Table"):
