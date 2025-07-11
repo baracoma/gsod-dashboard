@@ -121,15 +121,30 @@ elif agg_level == "Yearly":
         ORDER BY period
     """
 elif agg_level == "Monthly Mean (All Years)":
-    query = f"""
-        SELECT EXTRACT(month FROM date) AS period, AVG({plot_variable}) AS value
-        FROM gsod_daily
-        WHERE station_id = '{station_selection}'
-        GROUP BY period
-        ORDER BY period
-    """
-
+    if plot_variable == 'PRCP_mm':
+        query = f"""
+            SELECT month, AVG(monthly_total) AS value FROM (
+                SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
+                       SUM({plot_variable}) AS monthly_total
+                FROM gsod_daily
+                WHERE station_id = '{station_selection}'
+                GROUP BY year, month
+            )
+            GROUP BY month
+            ORDER BY month
+        """
+    else:
+        query = f"""
+            SELECT EXTRACT(month FROM date) AS month, AVG({plot_variable}) AS value
+            FROM gsod_daily
+            WHERE station_id = '{station_selection}'
+            GROUP BY month
+            ORDER BY month
+        """
 result_df = con.execute(query).df()
+if 'month' in result_df.columns:
+    result_df = result_df.rename(columns={'month': 'period'})
+
 if 'value' in result_df.columns:
     result_df['value'] = pd.to_numeric(result_df['value'], errors='coerce').round(2)
 
