@@ -13,10 +13,10 @@ def get_connection():
 
 con = get_connection()
 
-st.title("GSOD Philippines Dashboard")
+st.title("Global Summary of the Day  Philippines Dashboard")
 st.markdown("""Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial to metric.
 
-**Disclaimer:** This dashboard is for educational and research purposes only. For official data, please consult [PAGASA](https://www.pagasa.dost.gov.ph/climate/climate-data).""")
+**Disclaimer:** This dashboard is for educational and research purposes only. The data is incomplete and may contain errors. For complete, verified, and official data, please consult [PAGASA Climatology and Agrometeorology Division (CAD)](https://www.pagasa.dost.gov.ph/climate/climate-data).""")
 
 @st.cache_data
 def load_stations():
@@ -34,7 +34,8 @@ variable_options = {
     'TEMP_C': 'Mean Temperature',
     'PRCP_mm': 'Precipitation',
     'MAX_C': 'Maximum Temperature',
-    'MIN_C': 'Minimum Temperature'
+    'MIN_C': 'Minimum Temperature',
+    'RAINY_DAYS': 'Rainy Days'
 }
 
 with st.sidebar:
@@ -49,12 +50,20 @@ with st.sidebar:
         SELECT MIN(date), MAX(date) FROM gsod_daily WHERE station_id = '{station_selection}'
     """).fetchone()
 
-    date_range = st.date_input(
-        "Select Date Range",
-        value=(min_date, max_date),
-        min_value=min_date,
-        max_value=max_date,
-        key="date_range"
+    year_range = list(range(min_date.year, max_date.year + 1))
+    month_range = list(range(1, 13))
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        start_year = st.selectbox("Start Year", year_range, index=year_range.index(min_date.year))
+        end_year = st.selectbox("End Year", [y for y in year_range if y >= start_year], index=([y for y in year_range if y >= start_year].index(max_date.year) if max_date.year >= start_year else 0))
+    with col2:
+        start_month = st.selectbox("Start Month", month_range, index=min_date.month - 1)
+        end_month = st.selectbox("End Month", month_range, index=max_date.month - 1)
+
+    date_range = (
+        pd.Timestamp(f"{start_year}-{start_month:02d}-01"),
+        pd.Timestamp(f"{end_year}-{end_month:02d}-28")
     )
 
     plot_variable_label = st.selectbox(
@@ -64,11 +73,26 @@ with st.sidebar:
     )
     plot_variable = [k for k, v in variable_options.items() if v == plot_variable_label][0]
 
-    agg_level = st.selectbox(
-        "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean (All Years)", "Rainy Days"], key="aggregation_select"
-    )
+    if plot_variable != 'RAINY_DAYS':
+        agg_level = st.selectbox(
+            "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean (All Years)"], key="aggregation_select"
+        )
+    else:
+        agg_level = st.selectbox(
+            "Aggregation Level", ["Monthly", "Yearly"], key="aggregation_select_rainy"
+        )
 
-if agg_level == "Daily":
+if plot_variable == "RAINY_DAYS":
+    trunc_unit = 'month' if agg_level == "Monthly" else 'year'
+    query = f"""
+        SELECT DATE_TRUNC('{trunc_unit}', date) AS period, COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS value
+        FROM gsod_daily
+        WHERE station_id = '{station_selection}'
+          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+        GROUP BY period
+        ORDER BY period
+    """
+elif agg_level == "Daily":
     query = f"""
         SELECT date AS period, {plot_variable} AS value
         FROM gsod_daily
@@ -77,8 +101,9 @@ if agg_level == "Daily":
         ORDER BY period
     """
 elif agg_level == "Monthly":
+    aggregate_function = "SUM" if plot_variable == 'PRCP_mm' else "AVG"
     query = f"""
-        SELECT DATE_TRUNC('month', date) AS period, AVG({plot_variable}) AS value
+        SELECT DATE_TRUNC('month', date) AS period, {aggregate_function}({plot_variable}) AS value
         FROM gsod_daily
         WHERE station_id = '{station_selection}'
           AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
@@ -86,8 +111,9 @@ elif agg_level == "Monthly":
         ORDER BY period
     """
 elif agg_level == "Yearly":
+    aggregate_function = "SUM" if plot_variable == 'PRCP_mm' else "AVG"
     query = f"""
-        SELECT DATE_TRUNC('year', date) AS period, AVG({plot_variable}) AS value
+        SELECT DATE_TRUNC('year', date) AS period, {aggregate_function}({plot_variable}) AS value
         FROM gsod_daily
         WHERE station_id = '{station_selection}'
           AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
@@ -102,15 +128,6 @@ elif agg_level == "Monthly Mean (All Years)":
         GROUP BY period
         ORDER BY period
     """
-elif agg_level == "Rainy Days":
-    query = f"""
-        SELECT DATE_TRUNC('month', date) AS period, COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS value
-        FROM gsod_daily
-        WHERE station_id = '{station_selection}'
-          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
-        GROUP BY period
-        ORDER BY period
-    """
 
 result_df = con.execute(query).df()
 if 'value' in result_df.columns:
@@ -122,17 +139,25 @@ st.write(f"Location: {round(float(station_info['lat']), 2)}, {round(float(statio
 st.write(f"Showing {plot_variable_label} aggregated {agg_level.lower()} from {date_range[0]} to {date_range[1]}.")
 
 if not result_df.empty:
-    chart_data = result_df.set_index('period')['value'].reset_index()
     with st.sidebar:
-        y_min = st.number_input("Y-axis Min", value=float(chart_data['value'].min() - 5))
-        y_max = st.number_input("Y-axis Max", value=float(chart_data['value'].max() + 5))
+        default_min = 0.0 if plot_variable in ['PRCP_mm', 'RAINY_DAYS'] else float(result_df['value'].min() - 5)
+        y_min = st.number_input("Y-axis Min", value=default_min)
+        y_max = st.number_input("Y-axis Max", value=float(result_df['value'].max() + 5))
 
-    if plot_variable == 'PRCP_mm' or agg_level == "Rainy Days":
-        chart = alt.Chart(chart_data).mark_bar().encode(
+    chart_data = result_df.set_index('period')['value'].reset_index()
+    
+
+    if plot_variable == 'PRCP_mm' or plot_variable == 'RAINY_DAYS':
+        bar_size = max(10, int(300 / len(chart_data)))
+        chart = alt.Chart(chart_data).mark_bar(size=bar_size).encode(
             x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
     else:
+        chart = alt.Chart(chart_data).mark_line().encode(
+            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
+        )
         chart = alt.Chart(chart_data).mark_line().encode(
             x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
