@@ -31,11 +31,12 @@ def load_stations():
 stations_df = load_stations()
 
 variable_options = {
-    'TEMP_C': 'Mean Temperature',
     'PRCP_mm': 'Precipitation',
+    'RAINY_DAYS': 'Rainy Days',
+    'TEMP_C': 'Mean Temperature',
     'MAX_C': 'Maximum Temperature',
     'MIN_C': 'Minimum Temperature',
-    'RAINY_DAYS': 'Rainy Days'
+    'TEMP_ANOMALY': 'Temperature Anomaly'
 }
 
 with st.sidebar:
@@ -73,13 +74,17 @@ with st.sidebar:
     )
     plot_variable = [k for k, v in variable_options.items() if v == plot_variable_label][0]
 
-    if plot_variable != 'RAINY_DAYS':
+    if plot_variable == 'TEMP_ANOMALY':
         agg_level = st.selectbox(
-            "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean (All Years)"], key="aggregation_select"
+            "Aggregation Level", ["Daily", "Monthly", "Yearly"], key="aggregation_select_anomaly"
+        )
+    elif plot_variable == 'RAINY_DAYS':
+        agg_level = st.selectbox(
+            "Aggregation Level", ["Monthly", "Yearly"], key="aggregation_select_rainy"
         )
     else:
         agg_level = st.selectbox(
-            "Aggregation Level", ["Monthly", "Yearly"], key="aggregation_select_rainy"
+            "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean (All Years)"], key="aggregation_select"
         )
 
 if plot_variable == "RAINY_DAYS":
@@ -92,56 +97,86 @@ if plot_variable == "RAINY_DAYS":
         GROUP BY period
         ORDER BY period
     """
-elif agg_level == "Daily":
-    query = f"""
-        SELECT date AS period, {plot_variable} AS value
-        FROM gsod_daily
-        WHERE station_id = '{station_selection}'
-          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
-        ORDER BY period
-    """
-elif agg_level == "Monthly":
-    aggregate_function = "SUM" if plot_variable == 'PRCP_mm' else "AVG"
-    query = f"""
-        SELECT DATE_TRUNC('month', date) AS period, {aggregate_function}({plot_variable}) AS value
-        FROM gsod_daily
-        WHERE station_id = '{station_selection}'
-          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
-        GROUP BY period
-        ORDER BY period
-    """
-elif agg_level == "Yearly":
-    aggregate_function = "SUM" if plot_variable == 'PRCP_mm' else "AVG"
-    query = f"""
-        SELECT DATE_TRUNC('year', date) AS period, {aggregate_function}({plot_variable}) AS value
-        FROM gsod_daily
-        WHERE station_id = '{station_selection}'
-          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
-        GROUP BY period
-        ORDER BY period
-    """
-elif agg_level == "Monthly Mean (All Years)":
-    if plot_variable == 'PRCP_mm':
-        query = f"""
-            SELECT month, AVG(monthly_total) AS value FROM (
-                SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
-                       SUM({plot_variable}) AS monthly_total
-                FROM gsod_daily
-                WHERE station_id = '{station_selection}'
-                GROUP BY year, month
-            )
-            GROUP BY month
-            ORDER BY month
-        """
+    result_df = con.execute(query).df()
+
+elif plot_variable == "TEMP_ANOMALY":
+    if agg_level == "Daily":
+        group_unit = 'day'
+    elif agg_level == "Monthly":
+        group_unit = 'month'
+    elif agg_level == "Yearly":
+        group_unit = 'year'
     else:
+        group_unit = 'day'  # fallback
+
+    query = f"""
+        SELECT DATE_TRUNC('{group_unit}', date) AS period, AVG(TEMP_C) AS value
+        FROM gsod_daily
+        WHERE station_id = '{station_selection}'
+          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+        GROUP BY period
+        ORDER BY period
+    """
+    result_df = con.execute(query).df()
+    period_mean = result_df['value'].mean()
+    result_df['value'] = (result_df['value'] - period_mean).round(2)
+
+else:
+    if agg_level == "Daily":
         query = f"""
-            SELECT EXTRACT(month FROM date) AS month, AVG({plot_variable}) AS value
+            SELECT date AS period, {plot_variable} AS value
             FROM gsod_daily
             WHERE station_id = '{station_selection}'
-            GROUP BY month
-            ORDER BY month
+              AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+            ORDER BY period
         """
-result_df = con.execute(query).df()
+    elif agg_level == "Monthly":
+        aggregate_function = "SUM" if plot_variable == 'PRCP_mm' else "AVG"
+        query = f"""
+            SELECT DATE_TRUNC('month', date) AS period, {aggregate_function}({plot_variable}) AS value
+            FROM gsod_daily
+            WHERE station_id = '{station_selection}'
+              AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+            GROUP BY period
+            ORDER BY period
+        """
+    elif agg_level == "Yearly":
+        aggregate_function = "SUM" if plot_variable == 'PRCP_mm' else "AVG"
+        query = f"""
+            SELECT DATE_TRUNC('year', date) AS period, {aggregate_function}({plot_variable}) AS value
+            FROM gsod_daily
+            WHERE station_id = '{station_selection}'
+              AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+            GROUP BY period
+            ORDER BY period
+        """
+    elif agg_level == "Monthly Mean (All Years)":
+        if plot_variable == 'PRCP_mm':
+            query = f"""
+                SELECT month, AVG(monthly_total) AS value FROM (
+                    SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
+                           SUM({plot_variable}) AS monthly_total
+                    FROM gsod_daily
+                    WHERE station_id = '{station_selection}'
+                    GROUP BY year, month
+                )
+                GROUP BY month
+                ORDER BY month
+            """
+        else:
+            query = f"""
+                SELECT EXTRACT(month FROM date) AS month, AVG({plot_variable}) AS value
+                FROM gsod_daily
+                WHERE station_id = '{station_selection}'
+                GROUP BY month
+                ORDER BY month
+            """
+    result_df = con.execute(query).df()
+
+
+
+
+#result_df = con.execute(query).df()
 if 'month' in result_df.columns:
     result_df = result_df.rename(columns={'month': 'period'})
 
@@ -155,37 +190,31 @@ st.write(f"Showing {plot_variable_label} aggregated {agg_level.lower()} from {da
 
 if not result_df.empty:
     with st.sidebar:
-        default_min = 0.0 if plot_variable in ['PRCP_mm', 'RAINY_DAYS'] else float(result_df['value'].min() - 5)
+        if plot_variable == 'TEMP_ANOMALY':
+            default_min = float(result_df['value'].min() - 1)
+            default_max = float(result_df['value'].max() + 1)
+        else:
+            default_min = 0.0 if plot_variable in ['PRCP_mm', 'RAINY_DAYS'] else float(result_df['value'].min() - 5)
+            default_max = float(result_df['value'].max() + 5)
+
         y_min = st.number_input("Y-axis Min", value=default_min)
-        y_max = st.number_input("Y-axis Max", value=float(result_df['value'].max() + 5))
+        y_max = st.number_input("Y-axis Max", value=default_max)
+
 
     chart_data = result_df.set_index('period')['value'].reset_index()
     
 
     if plot_variable == 'PRCP_mm' or plot_variable == 'RAINY_DAYS':
         bar_size = max(10, int(300 / len(chart_data)))
-        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean (All Years)" else alt.X(
-            'period:O',
-            sort=list(range(1, 13)),
-            title='Month',
-            axis=alt.Axis(labelExpr="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][datum.value - 1]")
-        )
         chart = alt.Chart(chart_data).mark_bar(size=bar_size).encode(
-            x=x,
+            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
     else:
-        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean (All Years)" else alt.X(
-            'period:O',
-            sort=list(range(1, 13)),
-            title='Month',
-            axis=alt.Axis(labelExpr="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][datum.value - 1]")
-        )
         chart = alt.Chart(chart_data).mark_line().encode(
-            x=x,
+            x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
-
 
 
     st.altair_chart(chart, use_container_width=True)
