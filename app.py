@@ -231,7 +231,27 @@ if not result_df.empty:
         )
 
 
-    st.altair_chart(chart, use_container_width=True)
+    # st.altair_chart(chart, use_container_width=True)
+
+    with st.container():
+        col_chart, col_map = st.columns([2, 1])
+
+        with col_chart:
+            st.altair_chart(chart.properties(height=400), use_container_width=True)
+            # with st.expander("Show Data Table"):
+            #    st.dataframe(result_df)
+
+        with col_map:
+            st.map(pd.DataFrame({
+                'lat': [float(station_info['lat'])],
+                'lon': [float(station_info['lon'])]
+            }), size=5000, height=380, zoom=8)
+            # Add empty elements to balance height visually
+            st.write("")
+            st.write("")
+
+
+
     with st.expander("Show Data Table"):
         st.dataframe(result_df)
 else:
