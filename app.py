@@ -80,7 +80,7 @@ with st.sidebar:
         )
     elif plot_variable == 'RAINY_DAYS':
         agg_level = st.selectbox(
-            "Aggregation Level", ["Monthly", "Yearly"], key="aggregation_select_rainy"
+            "Aggregation Level", ["Monthly", "Yearly", "Monthly Mean (All Years)"], key="aggregation_select_rainy"
         )
     else:
         agg_level = st.selectbox(
@@ -88,16 +88,31 @@ with st.sidebar:
         )
 
 if plot_variable == "RAINY_DAYS":
-    trunc_unit = 'month' if agg_level == "Monthly" else 'year'
-    query = f"""
-        SELECT DATE_TRUNC('{trunc_unit}', date) AS period, COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS value
-        FROM gsod_daily
-        WHERE station_id = '{station_selection}'
-          AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
-        GROUP BY period
-        ORDER BY period
-    """
+    if agg_level == "Monthly Mean (All Years)":
+        query = f"""
+            SELECT month, AVG(rainy_count) AS value FROM (
+                SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
+                       COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS rainy_count
+                FROM gsod_daily
+                WHERE station_id = '{station_selection}'
+                GROUP BY year, month
+            )
+            GROUP BY month
+            ORDER BY month
+
+        """
+    else:
+        trunc_unit = 'month' if agg_level == "Monthly" else 'year'
+        query = f"""
+            SELECT DATE_TRUNC('{trunc_unit}', date) AS period, COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS value
+            FROM gsod_daily
+            WHERE station_id = '{station_selection}'
+              AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
+            GROUP BY period
+            ORDER BY period
+        """
     result_df = con.execute(query).df()
+
 
 elif plot_variable == "TEMP_ANOMALY":
     if agg_level == "Daily":
