@@ -14,7 +14,7 @@ def get_connection():
 con = get_connection()
 
 st.title("Global Summary of the Day  Philippines Dashboard")
-st.markdown("""Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial to metric.
+st.markdown("""Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial to metric. The list of available stations along with their names and coordinates can be found [here](https://github.com/baracoma/gsod-dashboard/blob/main/preprocessors/isd-history-ph.csv).
 
 **Disclaimer:** This dashboard is for educational and research purposes only. The data is provided as is and may contain errors and missing data. For complete, verified, and official data, please consult [PAGASA Climatology and Agrometeorology Division (CAD)](https://www.pagasa.dost.gov.ph/climate/climate-data).""")
 
