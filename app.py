@@ -49,6 +49,10 @@ with st.sidebar:
         SELECT MIN(date), MAX(date) FROM gsod_daily WHERE station_id = '{station_selection}'
     """).fetchone()
 
+    if min_date is None or max_date is None:
+        st.warning("No available data for this station.")
+        st.stop()
+
     year_range = list(range(min_date.year, max_date.year + 1))
     month_range = list(range(1, 13))
     
@@ -78,15 +82,16 @@ with st.sidebar:
         )
     elif plot_variable == 'RAINY_DAYS':
         agg_level = st.selectbox(
-            "Aggregation Level", ["Monthly", "Yearly", "Monthly Mean (All Years)"], key="aggregation_select_rainy"
+            "Aggregation Level", ["Monthly", "Yearly", "Monthly Mean"], key="aggregation_select_rainy"
         )
     else:
         agg_level = st.selectbox(
-            "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean (All Years)"], key="aggregation_select"
+            "Aggregation Level", ["Daily", "Monthly", "Yearly", "Monthly Mean"], key="aggregation_select"
         )
 
+
 if plot_variable == "RAINY_DAYS":
-    if agg_level == "Monthly Mean (All Years)":
+    if agg_level == "Monthly Mean":
         query = f"""
             SELECT month, AVG(rainy_count) AS value FROM (
                 SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
@@ -163,7 +168,7 @@ else:
             GROUP BY period
             ORDER BY period
         """
-    elif agg_level == "Monthly Mean (All Years)":
+    elif agg_level == "Monthly Mean":
         if plot_variable == 'PRCP_mm':
             query = f"""
                 SELECT month, AVG(monthly_total) AS value FROM (
@@ -219,26 +224,26 @@ if not result_df.empty:
 
     if plot_variable == 'PRCP_mm' or plot_variable == 'RAINY_DAYS':
         bar_size = max(10, int(300 / len(chart_data)))
-        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean (All Years)" else alt.X(
+        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean" else alt.X(
             'period:O',
             sort=list(range(1, 13)),
             title='Month',
             axis=alt.Axis(labelExpr="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][datum.value - 1]")
         )
         chart = alt.Chart(chart_data).mark_bar(size=bar_size).encode(
-            # x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            # x='period:T' if agg_level != "Monthly Mean" else 'period:O',
             x=x,
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
     else:
-        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean (All Years)" else alt.X(
+        x = alt.X('period:T', title='Date') if agg_level != "Monthly Mean" else alt.X(
             'period:O',
             sort=list(range(1, 13)),
             title='Month',
             axis=alt.Axis(labelExpr="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][datum.value - 1]")
         )
         chart = alt.Chart(chart_data).mark_line().encode(
-            # x='period:T' if agg_level != "Monthly Mean (All Years)" else 'period:O',
+            # x='period:T' if agg_level != "Monthly Mean" else 'period:O',
             x=x,
             y=alt.Y('value:Q', scale=alt.Scale(domain=[y_min, y_max]))
         )
