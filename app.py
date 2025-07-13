@@ -13,10 +13,8 @@ def get_connection():
 
 con = get_connection()
 
-st.title("Global Summary of the Day  Philippines Dashboard")
-st.markdown("""Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial to metric. The list of available stations along with their names and coordinates can be found [here](https://github.com/baracoma/gsod-dashboard/blob/main/preprocessors/isd-history-ph.csv).
-
-**Disclaimer:** This dashboard is for educational and research purposes only. The data is provided as is and may contain errors and missing data. For complete, verified, and official data, please consult [PAGASA Climatology and Agrometeorology Division (CAD)](https://www.pagasa.dost.gov.ph/climate/climate-data).""")
+st.title("Global Summary of the Day Philippines Dashboard")
+#st.markdown("")
 
 @st.cache_data
 def load_stations():
@@ -265,10 +263,25 @@ if not result_df.empty:
             st.write("")
             st.write("")
 
+    st.markdown(""" **About the data:** Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial units to metric. A list of available stations along with their names and coordinates can be found [here](https://github.com/baracoma/gsod-dashboard/blob/main/preprocessors/isd-history-ph.csv).
 
+**Disclaimer:** This dashboard is for educational and research purposes only. The data is provided as is, without warranties of any kind, express or implied, including but not limited to accuracy, completeness, reliability, or fitness for a particular purpose.
 
+The developers and data providers do not accept liability for any loss, damage, or consequences resulting from the use of this dashboard. This tool is not intended for operational forecasting, life-and-death decision-making, insurance, legal, or other critical applications. 
+
+For complete, verified, and official climatological data in the Philippines, please consult [PAGASA Climatology and Agrometeorology Division (CAD)](https://www.pagasa.dost.gov.ph/climate/climate-data).
+
+**Additional references:** 
+- Bagtasa, G. (2020). 118‐year climate and extreme weather events of Metropolitan Manila in the Philippines. International Journal of Climatology, 40(2), 1228–1240. https://doi.org/10.1002/joc.6267
+
+- Bangquiao, N., & Basconcillo, J. (2025). Homogenization of Daily Rainfall, Minimum and Maximum Temperature in the Philippines. SOLA, 21(0), 217–226. https://doi.org/10.2151/sola.2025-027
+
+""")
+    st.markdown("")
     with st.expander("Show Data Table"):
         st.dataframe(result_df)
+
+
 else:
     st.warning("No data available for the selected options.")
 
