@@ -268,6 +268,8 @@ if not result_df.empty:
             st.write("")
             st.write("")
 
+    st.markdown("If you find this dashboard helpful, consider supporting future development: [and buy me a ko-fi.](https://ko-fi.com/baracoma)")
+
     st.markdown(""" **About the data:** Data is downloaded from [NOAA NCEI Global Surface Summary of the Day - GSOD](https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ncdc:C00516) and then converted from imperial units to metric. A list of available stations along with their names and coordinates can be found [here](https://github.com/baracoma/gsod-dashboard/blob/main/preprocessors/isd-history-ph.csv).
 
 **Disclaimer:** This dashboard is for educational and research purposes only. The data is provided as is, without warranties of any kind, express or implied, including but not limited to accuracy, completeness, reliability, or fitness for a particular purpose.

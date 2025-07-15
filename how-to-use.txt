@@ -1,2 +1,0 @@
-conda activate gsod-dashboard
-streamlit run app.py
