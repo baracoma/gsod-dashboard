@@ -92,17 +92,29 @@ with st.sidebar:
 
 if plot_variable == "RAINY_DAYS":
     if agg_level == "Monthly Mean":
+        # query = f"""
+        #     SELECT month, AVG(rainy_count) AS value FROM (
+        #         SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
+        #                COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS rainy_count
+        #         FROM gsod_daily
+        #         WHERE station_id = '{station_selection}'
+        #         GROUP BY year, month
+        #     )
+        #     GROUP BY month
+        #     ORDER BY month
+
+        # """
         query = f"""
             SELECT month, AVG(rainy_count) AS value FROM (
                 SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
                        COUNT(*) FILTER (WHERE PRCP_mm >= 1.0) AS rainy_count
                 FROM gsod_daily
                 WHERE station_id = '{station_selection}'
+                  AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
                 GROUP BY year, month
             )
             GROUP BY month
             ORDER BY month
-
         """
     else:
         trunc_unit = 'month' if agg_level == "Monthly" else 'year'
@@ -170,22 +182,42 @@ else:
         """
     elif agg_level == "Monthly Mean":
         if plot_variable == 'PRCP_mm':
+            # query = f"""
+            #     SELECT month, AVG(monthly_total) AS value FROM (
+            #         SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
+            #                SUM({plot_variable}) AS monthly_total
+            #         FROM gsod_daily
+            #         WHERE station_id = '{station_selection}'
+            #         GROUP BY year, month
+            #     )
+            #     GROUP BY month
+            #     ORDER BY month
+            # """
             query = f"""
                 SELECT month, AVG(monthly_total) AS value FROM (
                     SELECT EXTRACT(year FROM date) AS year, EXTRACT(month FROM date) AS month, 
                            SUM({plot_variable}) AS monthly_total
                     FROM gsod_daily
                     WHERE station_id = '{station_selection}'
+                      AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
                     GROUP BY year, month
                 )
                 GROUP BY month
                 ORDER BY month
             """
         else:
+            # query = f"""
+            #     SELECT EXTRACT(month FROM date) AS month, AVG({plot_variable}) AS value
+            #     FROM gsod_daily
+            #     WHERE station_id = '{station_selection}'
+            #     GROUP BY month
+            #     ORDER BY month
+            # """
             query = f"""
                 SELECT EXTRACT(month FROM date) AS month, AVG({plot_variable}) AS value
                 FROM gsod_daily
                 WHERE station_id = '{station_selection}'
+                  AND date BETWEEN '{date_range[0]}' AND '{date_range[1]}'
                 GROUP BY month
                 ORDER BY month
             """
@@ -204,7 +236,15 @@ if 'value' in result_df.columns:
 station_info = stations_df.set_index('station_id').loc[station_selection]
 st.write(f"### {station_info['label']}")
 st.write(f"Location: {round(float(station_info['lat']), 2)}, {round(float(station_info['lon']), 2)}")
-st.write(f"Showing {plot_variable_label} aggregated {agg_level.lower()} from {date_range[0]} to {date_range[1]}.")
+# st.write(f"Showing {plot_variable_label} aggregated {agg_level.lower()} from {date_range[0]} to {date_range[1]}.")
+
+start_str = date_range[0].strftime('%Y-%m-%d')
+end_str = date_range[1].strftime('%Y-%m-%d')
+num_years = end_year - start_year + 1
+
+st.write(f"Showing {plot_variable_label} aggregated {agg_level.lower()} from {start_str} to {end_str} "
+         f"(based on {num_years} years of data).")
+
 
 if not result_df.empty:
     with st.sidebar:
